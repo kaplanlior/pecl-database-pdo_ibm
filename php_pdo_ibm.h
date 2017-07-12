@@ -22,7 +22,7 @@
 #ifndef PHP_PDO_IBM_H
 #define PHP_PDO_IBM_H
 
-#define PDO_IBM_VERSION "1.3.4"
+#define PDO_IBM_VERSION "1.3.4-sg3"
 
 extern zend_module_entry pdo_ibm_module_entry;
 #define phpext_pdo_ibm_ptr &pdo_ibm_module_entry
@@ -51,6 +51,10 @@ PHP_FUNCTION(confirm_pdo_ibm_compiled);	/* For testing, remove later. */
 */
 ZEND_BEGIN_MODULE_GLOBALS(pdo_ibm)
 	int is_i5os_classic;             /* 1 == v5r4-; 0 == v6r1+; */
+#ifdef PASE /* i5/OS ease of use turn off/on */
+	long		i5_ignore_userid; 		/* blank userid, possible no qsqsrvr  */
+	long		i5_override_ccsid; 		/* prior any CLI routine override ascii ccsid */
+#endif /* PASE */
 ZEND_END_MODULE_GLOBALS(pdo_ibm)
 
 

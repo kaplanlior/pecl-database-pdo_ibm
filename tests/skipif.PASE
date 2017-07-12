@@ -21,3 +21,4 @@ fvt_038_LastInsertID.phpt|PASE|V5|V6|test case improvement|
 fvt_040_ServerInfo.phpt|PASE|V5|V6|test case improvement|
 fvt_49872_ClearingErrCodes.phpt|PASE|V5|V6|i5 (null) missing vs LUW|
 fvt_trusted_context.phpt|PASE|V5|V6|i5 no trusted support|
+fvt_isam_error.phpt|PASE|V5|V6|i5 no trusted support|
