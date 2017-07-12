@@ -1,5 +1,5 @@
 --TEST--
-pdo_ibm: Test error conditions through faulty SQL
+pdo_ibm: ISAM Error
 --SKIPIF--
 <?php require_once('skipif.inc'); ?>
 --FILE--
@@ -9,15 +9,14 @@ pdo_ibm: Test error conditions through faulty SQL
 	{
 		public function runTest()
 		{
+			print "Attempting to connect..\n";
 			$this->connect();
-			$parmno = "200010";
+			
+			$sql = "SELECT count(*) FROM notab";
+			
 			try {
-				$stmt = $this->db->prepare("SELECT empno, lastname, bonus, FROM employee WHERE empno > ?");
-				$stmt->execute( array( $parmno ));
-				while ($row = $stmt->fetch()) {
-					print_r($row);
-				}
-			}	catch (PDOException $pe) {
+				$stmt = $this->db->query($sql);			
+			} catch (PDOException $e) {
 				echo "Error code:\n";
 				print_r($this->db->errorCode());
 				echo "\n";
@@ -31,12 +30,14 @@ pdo_ibm: Test error conditions through faulty SQL
 	$testcase->runTest();
 ?>
 --EXPECTF--
+Attempting to connect..
 Error code:
-42601
+42704
 Error info:
 Array
 (
-    [0] => 42601
-    [1] => -199
-    [2] => Keyword WHERE not expected. %s (SQLPrepare[-199] %s
+    [0] => 42704
+    [1] => -204
+    [2] => NOTAB in DB2 type *FILE not found. (SQLPrepare[-204] %s
 )
+

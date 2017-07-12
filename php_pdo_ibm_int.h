@@ -75,6 +75,23 @@ enum {
 
 
 #ifdef PASE /* i5/OS introduced after DB2 v5 (1.3.2) */
+/* IBM i long is same ordinal, set to fake/unused ordinal (remove ifdef PASE) */
+#undef SQL_LONGVARCHAR
+#define SQL_LONGVARCHAR -334 
+#undef SQL_LONGVARGRAPHIC
+#define SQL_LONGVARGRAPHIC -335
+#undef SQL_LONGVARBINARY
+#define SQL_LONGVARBINARY -336
+#undef SQL_WLONGVARCHAR
+#define SQL_WLONGVARCHAR -337
+/* IBM i support V6R1+, ignore V5R4- (remove ifdef PASE) */
+#undef SQL_BINARY
+#define  SQL_BINARY          -2
+#undef SQL_VARBINARY
+#define  SQL_VARBINARY       -3
+#undef SQL_C_BINARY
+#define  SQL_C_BINARY	SQL_BINARY
+
 #ifndef SQL_ATTR_INFO_USERID
 #define SQL_ATTR_INFO_USERID		10103
 #endif
@@ -285,6 +302,9 @@ typedef struct _stmt_handle_struct {
 
 /* Defines the driver_data structure for caching param data */
 typedef struct _param_node {
+#ifdef PASE
+	int		param_type;			/* Type of param - INP/OUT/INP-OUT/FILE */
+#endif /* PASE */
 	SQLSMALLINT	data_type;			/* The database data type */
 	SQLUINTEGER	param_size;			/* param size */
 	SQLSMALLINT nullable;			/* is Nullable  */
