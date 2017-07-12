@@ -119,8 +119,6 @@ PHP_INI_END()
  */
 static void php_pdo_ibm_init_globals(zend_pdo_ibm_globals *pdo_ibm_globals)
 {
-        pdo_ibm_globals->is_i5os_classic = 1;
-	
 #ifdef PASE /* prior any CLI routine override ascii ccsid */
 	if (pdo_ibm_globals->i5_override_ccsid) {
 		SQLOverrideCCSID400(pdo_ibm_globals->i5_override_ccsid);
