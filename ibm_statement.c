@@ -40,20 +40,6 @@
 # endif
 #endif
 
-#ifdef PASE 
-/* i5/OS V6R1 introduced incompatible change at the compile level
- * adding from v6r1 sqlcli.h to allow one binary for
- * v5r3, v5r4, v6r1+
- */
-#define  SQL_BINARY_V6          -2
-#define  SQL_VARBINARY_V6       -3
-#define  SQL_C_BINARY_V6        SQL_BINARY_V6
-
-#define SQL_ATTR_INFO_USERID         10103
-#define SQL_ATTR_INFO_WRKSTNNAME     10104
-#define SQL_ATTR_INFO_APPLNAME       10105
-#define SQL_ATTR_INFO_ACCTSTR        10106
-#endif /* PASE */
 
 struct lob_stream_data
 {
@@ -151,10 +137,6 @@ size_t lob_stream_read(php_stream *stream, char *buf, size_t count TSRMLS_DC)
 #ifndef PASE
 		case SQL_LONGVARBINARY:
 #endif
-#ifdef PASE /* i5/OS incompatible v6r1 change */
-		case SQL_VARBINARY_V6:
-		case SQL_BINARY_V6:
-#endif /* PASE */
 		case SQL_VARBINARY:
 		case SQL_BINARY:
 		case SQL_BLOB:
@@ -162,15 +144,7 @@ size_t lob_stream_read(php_stream *stream, char *buf, size_t count TSRMLS_DC)
 		case SQL_CLOB:
 #endif
 		case SQL_XML:
-#ifdef PASE /* i5/OS V6R1 incompatible change */
-			if (PDO_IBM_G(is_i5os_classic)){
-				ctype = SQL_C_BINARY;
-			} else {
-				ctype = SQL_C_BINARY_V6;
-			}
-#else
 			ctype = SQL_C_BINARY;
-#endif /* not PASE */
 			break;
 	}
 
@@ -357,12 +331,7 @@ static int stmt_get_parameter_info(pdo_stmt_t * stmt, struct pdo_bound_param_dat
 		switch (param_res->data_type) {
 			/*
 			* The binary forms need to be transferred as binary
-			* data, not as char data.
-			*/
-#ifdef PASE /* i5/OS incompatible v6r1 change */
-			case SQL_VARBINARY_V6:
-			case SQL_BINARY_V6:
-#endif /* PASE */
+			* data, not as char data. */
 			case SQL_BINARY:
 			case SQL_BLOB:
 #ifndef PASE /* i5/OS CLOB is char not binary (default) */
@@ -373,15 +342,7 @@ static int stmt_get_parameter_info(pdo_stmt_t * stmt, struct pdo_bound_param_dat
 #ifndef PASE
 			case SQL_LONGVARBINARY:
 #endif
-#ifdef PASE /* i5/OS V6R1 incompatible change */
-				if (PDO_IBM_G(is_i5os_classic)){
-					param_res->ctype = SQL_C_BINARY;
-				} else {
-					param_res->ctype = SQL_C_BINARY_V6;
-				}
-#else
 				param_res->ctype = SQL_C_BINARY;
-#endif /* not PASE */
 				break;
 
 			/*
@@ -412,7 +373,7 @@ int stmt_bind_parameter(pdo_stmt_t *stmt, struct pdo_bound_param_data *curr TSRM
 	int rc, is_num = 0;
 	stmt_handle *stmt_res = (stmt_handle *) stmt->driver_data;
 	param_node *param_res = NULL;
-	SQLSMALLINT inputOutputType;
+	SQLSMALLINT inputOutputType = 0;
 #ifdef PASE
 	char *data_buf = NULL;
 #endif
@@ -429,7 +390,7 @@ int stmt_bind_parameter(pdo_stmt_t *stmt, struct pdo_bound_param_data *curr TSRM
 	* how to handle this.
 	* this is rare, really only used for stored procedures.
 	*/
-	if (curr->param_type & PDO_PARAM_INPUT_OUTPUT > 0) {
+	if ((unsigned)((unsigned)curr->param_type & (unsigned)PDO_PARAM_INPUT_OUTPUT) == (unsigned)PDO_PARAM_INPUT_OUTPUT) {
 		inputOutputType = SQL_PARAM_INPUT_OUTPUT;
 	}
 	/*
@@ -447,6 +408,14 @@ int stmt_bind_parameter(pdo_stmt_t *stmt, struct pdo_bound_param_data *curr TSRM
 	* Now do the actual binding, which is controlled by the
 	* PDO supplied type.
 	*/
+#if PHP_MAJOR_VERSION >= 7
+                                zval *parameter;
+                                if (Z_ISREF(curr->parameter)) {
+                                        parameter = Z_REFVAL(curr->parameter);
+                                } else {
+                                        parameter = &curr->parameter;
+                                }
+#endif
 	switch (PDO_PARAM_TYPE(curr->param_type)) {
 		/* not implemented yet */
 		case PDO_PARAM_STMT:
@@ -461,21 +430,17 @@ int stmt_bind_parameter(pdo_stmt_t *stmt, struct pdo_bound_param_data *curr TSRM
 		* directly,
 		*/
 			if (param_res->ctype == SQL_C_LONG) {
-#ifdef PASE /* i5/OS SQLBindParameter null issues */
-				if (Z_TYPE_P(curr->parameter) == IS_NULL)
-					convert_to_long(curr->parameter);
-#endif /* PASE */
 
 #if PHP_MAJOR_VERSION >= 7
-                                zval *parameter;
-                                if (Z_ISREF(curr->parameter)) {
-                                        parameter = Z_REFVAL(curr->parameter);
-                                } else {
-                                        parameter = &curr->parameter;
-                                }
                                 if ( parameter == NULL || Z_TYPE_P(parameter) == IS_NULL ) {
+#ifdef PASE /* i5/OS SQLBindParameter null issues */
+					convert_to_long(parameter);
+#endif /* PASE */
 #else                    
 				if (Z_TYPE_P(curr->parameter) == IS_NULL) {
+#ifdef PASE /* i5/OS SQLBindParameter null issues */
+					convert_to_long(curr->parameter);
+#endif /* PASE */
 #endif
 					/* null value was found */
 					param_res->transfer_length = SQL_NULL_DATA;
@@ -493,9 +458,15 @@ int stmt_bind_parameter(pdo_stmt_t *stmt, struct pdo_bound_param_data *curr TSRM
 					return TRUE;
 				} else {
 #ifdef PASE /* i5/OS SQLBindParameter string ptr to null byte issues */
+#if PHP_MAJOR_VERSION >= 7
+					if (Z_TYPE_P(parameter) == IS_STRING
+							&& !strcmp(curr->parameter.value.str->val, ""))
+						convert_to_long(parameter);
+#else
 					if (Z_TYPE_P(curr->parameter) == IS_STRING
 							&& !strcmp(curr->parameter->value.str.val, ""))
 						convert_to_long(curr->parameter);
+#endif
 #endif /* PASE */
 
 #if PHP_MAJOR_VERSION >= 7
@@ -563,18 +534,17 @@ int stmt_bind_parameter(pdo_stmt_t *stmt, struct pdo_bound_param_data *curr TSRM
 			if (param_res->ctype == SQL_C_LONG) {
 				/* change this to a character type */
 #ifdef PASE /* i5/OS SQLBindParameter string ptr to null byte issues */
+#if PHP_MAJOR_VERSION >= 7
+				if (!strcmp(curr->parameter.value.str->val, ""))
+					convert_to_long(parameter);
+#else
 				if (!strcmp(curr->parameter->value.str.val, ""))
 					convert_to_long(curr->parameter);
+#endif
 #endif /* PASE */
 				param_res->ctype = SQL_C_CHAR;
 				is_num = 1;
 			}
-#ifdef PASE /* i5/OS SQLBindParameter null issues */
-			if ((param_res->data_type == SQL_CLOB
-				|| param_res->data_type == SQL_DBCLOB)
-				&& Z_TYPE_P(curr->parameter) == IS_NULL)
-				convert_to_string(curr->parameter);
-#endif /* PASE */
 #if PHP_MAJOR_VERSION >= 7
                                 zval *parameter;
                                 if (Z_ISREF(curr->parameter)) {
@@ -582,6 +552,19 @@ int stmt_bind_parameter(pdo_stmt_t *stmt, struct pdo_bound_param_data *curr TSRM
                                 } else {
                                         parameter = &curr->parameter;
                                 }
+#endif
+#ifdef PASE /* i5/OS SQLBindParameter null issues */
+			if ((param_res->data_type == SQL_CLOB
+				|| param_res->data_type == SQL_DBCLOB)
+#if PHP_MAJOR_VERSION >= 7
+				&& Z_TYPE_P(parameter) == IS_NULL)
+				convert_to_string(parameter);
+#else
+				&& Z_TYPE_P(curr->parameter) == IS_NULL)
+				convert_to_string(curr->parameter);
+#endif
+#endif /* PASE */
+#if PHP_MAJOR_VERSION >= 7
                                 if ( parameter == NULL || Z_TYPE_P(parameter) == IS_NULL ||
                                     (is_num && Z_STRVAL_P(parameter) != NULL &&
                                      (Z_STRVAL_P(parameter) == '\0'))) { 
@@ -653,6 +636,27 @@ int stmt_bind_parameter(pdo_stmt_t *stmt, struct pdo_bound_param_data *curr TSRM
 				*/
 				param_res->transfer_length = 0;
 
+#ifdef PASE /* param_size reset LUW error??? */
+				/*
+				* Now we need to make sure the string buffer
+				* is large enough to receive a new value if
+				* this is an output or in/out parameter
+				*/
+#if PHP_MAJOR_VERSION >= 7
+				if (inputOutputType != SQL_PARAM_INPUT && param_res->param_size > Z_STRLEN_P(parameter)) {
+					/* reallocate this to the new size */
+					Z_PTR_P(parameter) = erealloc(Z_STRVAL_P(parameter), param_res->param_size + 1);
+					check_stmt_allocation(Z_STRVAL_P(parameter),
+#else
+				if (inputOutputType != SQL_PARAM_INPUT && param_res->param_size > Z_STRLEN_P(curr->parameter)) {
+					/* reallocate this to the new size */
+					Z_STRVAL_P(curr->parameter) = erealloc(Z_STRVAL_P(curr->parameter), param_res->param_size + 1);
+					check_stmt_allocation(Z_STRVAL_P(curr->parameter),
+#endif
+							"stmt_bind_parameter",
+							"Unable to allocate bound parameter");
+				}
+#else /*PASE */
 #if PHP_MAJOR_VERSION >= 7
 				param_res->param_size = Z_STRLEN_P(parameter);
 #else
@@ -678,14 +682,14 @@ int stmt_bind_parameter(pdo_stmt_t *stmt, struct pdo_bound_param_data *curr TSRM
 				if (inputOutputType != SQL_PARAM_INPUT &&
 						curr->max_value_len > Z_STRLEN_P(curr->parameter)) {
 					/* reallocate this to the new size */
-					Z_STRVAL_P(curr->parameter) = erealloc(Z_STRVAL_P(curr->parameter),
-							curr->max_value_len + 1);
+					Z_STRVAL_P(curr->parameter) = erealloc(Z_STRVAL_P(curr->parameter), curr->max_value_len + 1);
 					check_stmt_allocation(Z_STRVAL_P(curr->parameter),
 							"stmt_bind_parameter",
 							"Unable to allocate bound parameter");
 				}
 #endif
 
+#endif /* PASE */
 				rc = SQLBindParameter(stmt_res->hstmt, curr->paramno + 1,
 						inputOutputType, param_res->ctype,
 						param_res->data_type,
@@ -726,15 +730,10 @@ int stmt_bind_parameter(pdo_stmt_t *stmt, struct pdo_bound_param_data *curr TSRM
 				param_res->ctype = SQL_C_BINARY;
 			}
 #else
-			if (param_res->data_type == SQL_CLOB
-				|| param_res->data_type == SQL_DBCLOB) {
+			if (param_res->data_type == SQL_CLOB || param_res->data_type == SQL_DBCLOB) {
 				param_res->ctype = SQL_C_CHAR;
 			} else {
-				if (PDO_IBM_G(is_i5os_classic)){
 					param_res->ctype = SQL_C_BINARY;
-				} else {
-					param_res->ctype = SQL_C_BINARY_V6;
-				}
 			}
 #endif
 
@@ -742,13 +741,25 @@ int stmt_bind_parameter(pdo_stmt_t *stmt, struct pdo_bound_param_data *curr TSRM
 #ifndef PASE
 			param_res->transfer_length = SQL_DATA_AT_EXEC;
 #else
+#if PHP_MAJOR_VERSION >= 7
+			if (Z_TYPE_P(parameter) == IS_RESOURCE) {
+#else
 			if (Z_TYPE_P(curr->parameter) == IS_RESOURCE) {
+#endif
 				param_res->transfer_length = SQL_DATA_AT_EXEC;
 				data_buf = (char *)curr;
 			} else {
+#if PHP_MAJOR_VERSION >= 7
+				param_res->transfer_length = SQL_LEN_DATA_AT_EXEC(Z_STRLEN_P(parameter));
+#else
 				param_res->transfer_length = SQL_LEN_DATA_AT_EXEC(Z_STRLEN_P(curr->parameter));     
+#endif
 				/* get the pointer to the string data */
+#if PHP_MAJOR_VERSION >= 7
+				data_buf = Z_STRVAL_P(parameter);
+#else
 				data_buf = Z_STRVAL_P(curr->parameter);
+#endif
 				/* to cause a conversion to ebcdic */
 			}
 #endif
@@ -985,7 +996,9 @@ static int stmt_bind_column(pdo_stmt_t *stmt, int colno TSRMLS_DC)
 				col_res->lob_loc = 0;
 				if(col_res->data_type == SQL_CLOB) {
 					col_res->loc_type = SQL_CLOB_LOCATOR;
-#ifdef PASE /* i5 DBCLOB locator */
+#ifdef PASE /* i5 DBCLOB/BLOB locator */
+				} else if(col_res->data_type == SQL_BLOB) {
+					col_res->loc_type = SQL_BLOB_LOCATOR;
 				} else if(col_res->data_type == SQL_DBCLOB) {
 					col_res->loc_type = SQL_DBCLOB_LOCATOR;
 #endif /* PASE */
@@ -1014,11 +1027,9 @@ static int stmt_bind_column(pdo_stmt_t *stmt, int colno TSRMLS_DC)
 		case SQL_BINARY:
 		case SQL_XML:
 #endif
-#ifdef PASE /* i5/OS incompatible v6r1 change */
-		case SQL_VARBINARY_V6:
-		case SQL_BINARY_V6:
-#endif /* PASE */
+#ifndef PASE
 		case SQL_LONGVARCHAR:
+#endif /* PASE */
 		case SQL_CHAR:
 		case SQL_VARCHAR:
 		case SQL_TYPE_TIME:
