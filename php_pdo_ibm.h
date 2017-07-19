@@ -50,6 +50,9 @@ PHP_FUNCTION(confirm_pdo_ibm_compiled);	/* For testing, remove later. */
 	and END macros here: 
 */
 ZEND_BEGIN_MODULE_GLOBALS(pdo_ibm)
+#ifdef PHP_WIN32 // populate struct with something in order to compile under windows
+	int dummy;
+#endif
 #ifdef PASE /* i5/OS ease of use turn off/on */
 	long		i5_ignore_userid; 		/* blank userid, possible no qsqsrvr  */
 	long		i5_override_ccsid; 		/* prior any CLI routine override ascii ccsid */
